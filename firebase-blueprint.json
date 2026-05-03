@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["email", "role"]
+    },
+    "Program": {
+      "title": "Program",
+      "description": "Competition programs",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["single", "group"] },
+        "maxParticipants": { "type": "number" }
+      },
+      "required": ["name", "type", "maxParticipants"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Competition results",
+      "type": "object",
+      "properties": {
+        "programId": { "type": "string" },
+        "category": { "type": "string" },
+        "resultNumber": { "type": "number" },
+        "resultScope": { "type": "string", "enum": ["program", "team"] },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "posterUrl": { "type": "string" }
+      },
+      "required": ["programId", "category", "resultNumber", "resultScope", "publishedAt"]
+    },
+    "Entry": {
+      "title": "Entry",
+      "description": "Individual result entries/winners",
+      "type": "object",
+      "properties": {
+        "resultId": { "type": "string" },
+        "name": { "type": "string" },
+        "team": { "type": "string" },
+        "points": { "type": "number" },
+        "grade": { "type": "string", "enum": ["A", "B", "C"] },
+        "position": { "type": "number" }
+      },
+      "required": ["resultId", "name", "team", "points", "grade", "position"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/programs/{programId}": {
+      "schema": "Program",
+      "description": "Programs master list"
+    },
+    "/results/{resultId}": {
+      "schema": "Result",
+      "description": "Published results"
+    },
+    "/results/{resultId}/entries/{entryId}": {
+      "schema": "Entry",
+      "description": "Entries for a specific result"
+    }
+  }
+}
