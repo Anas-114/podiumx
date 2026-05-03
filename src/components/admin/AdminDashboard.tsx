@@ -12,9 +12,13 @@ import { toPng } from 'html-to-image';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'leaderboard' | 'browse' | 'create' | 'programs'>('dashboard');
+  const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [results, setResults] = useState<Result[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const { profile } = useAuth();
+  
+  const selectedResult = results.find(r => r.id === selectedResultId) || results[0];
   
   useEffect(() => {
     const qPrograms = query(collection(db, 'programs'), orderBy('name'));
@@ -76,6 +80,8 @@ export default function AdminDashboard() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-brand-primary transition-colors" />
             <input 
               placeholder="Search programs or teams..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#121212] border border-white/5 rounded-full py-3 pl-12 pr-6 text-sm focus:outline-none focus:border-brand-primary/50 transition-all"
             />
           </div>
@@ -90,32 +96,47 @@ export default function AdminDashboard() {
 
         {/* Dynamic Content */}
         <main className="flex-1 p-6 pt-0 overflow-y-auto">
-          {activeTab === 'dashboard' && <RecentResults results={results} />}
-          {activeTab === 'create' && <ResultForm programs={programs} resultsCount={results.length} onSuccess={() => setActiveTab('dashboard')} />}
+          {activeTab === 'dashboard' && <RecentResults results={results} search={searchQuery} onSelect={setSelectedResultId} />}
+          {activeTab === 'create' && <ResultForm programs={programs} resultsCount={results.length} onSuccess={() => {
+            setActiveTab('dashboard');
+            setSearchQuery('');
+          }} />}
           {activeTab === 'programs' && <ProgramManager programs={programs} />}
           {activeTab === 'leaderboard' && <div className="p-8 text-white/20 italic">Dashboard Integrated Leaderboard coming soon...</div>}
+          {activeTab === 'browse' && <RecentResults results={results} search={searchQuery} onSelect={setSelectedResultId} />}
         </main>
       </div>
 
-      {/* Right Column: Live Poster Preview */}
-      <aside className="w-96 p-6 sticky top-0 h-screen shrink-0 overflow-y-auto border-l border-white/5 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-lg">Live Poster Preview</h3>
-            <button className="text-[10px] font-black text-brand-primary tracking-widest uppercase hover:underline">Download PNG</button>
-          </div>
-          
-          <div className="flex-1 flex items-center justify-center">
-            <PosterPreview 
-                programName={"Inter-Collegiate Debate"}
-                category={"CAMPUS GIRLS"}
-                resultNumber={results[0]?.resultNumber || 42}
-                winners={[
-                  { name: "Samantha Roberts", team: "ST. XAVIER'S COLLEGE", position: 1, grade: "A" }
-                ]}
-                id="live-preview-standalone"
-            />
-          </div>
-      </aside>
+      {/* Right Column: Live Poster Preview - Only show when NOT creating */}
+      {activeTab !== 'create' && (
+        <aside className="w-96 p-6 sticky top-0 h-screen shrink-0 overflow-y-auto border-l border-white/5 flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-lg">Live Poster Preview</h3>
+              <button className="text-[10px] font-black text-brand-primary tracking-widest uppercase hover:underline">Download PNG</button>
+            </div>
+            
+            <div className="flex-1 flex items-center justify-center">
+              {selectedResult ? (
+                  <div className="scale-90 origin-center">
+                      <img 
+                          src={selectedResult.posterUrl} 
+                          alt="Result Poster" 
+                          className="max-w-full rounded-[2rem] shadow-2xl border border-white/10"
+                          referrerPolicy="no-referrer"
+                      />
+                  </div>
+              ) : (
+                  <PosterPreview 
+                      programName={"Inter-Collegiate Debate"}
+                      category={"CAMPUS GIRLS"}
+                      resultNumber={42}
+                      winners={[]}
+                      id="live-preview-empty"
+                  />
+              )}
+            </div>
+        </aside>
+      )}
     </div>
   );
 }
@@ -132,7 +153,12 @@ function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode, 
   );
 }
 
-function RecentResults({ results }: { results: Result[] }) {
+function RecentResults({ results, search, onSelect }: { results: Result[], search: string, onSelect: (id: string) => void }) {
+  const filteredResults = results.filter(r => 
+    r.programName?.toLowerCase().includes(search.toLowerCase()) ||
+    r.category.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex justify-between items-center">
@@ -141,9 +167,10 @@ function RecentResults({ results }: { results: Result[] }) {
       </div>
 
       <div className="space-y-4">
-        {results.map((result) => (
+        {filteredResults.map((result) => (
           <motion.div 
             key={result.id}
+            onClick={() => onSelect(result.id)}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="glass-card p-6 rounded-3xl group cursor-pointer"
@@ -160,9 +187,12 @@ function RecentResults({ results }: { results: Result[] }) {
             </div>
             
             <h3 className="text-2xl font-bold tracking-tight group-hover:text-brand-primary transition-colors mb-2">{result.programName}</h3>
-            <p className="text-xs text-white/40 font-medium">Published 2 hours ago • Single Participant</p>
+            <p className="text-xs text-white/40 font-medium">
+                {result.publishedAt ? new Date((result.publishedAt as any).seconds * 1000).toLocaleString() : 'Just now'} • {result.resultScope === 'program' ? 'Program Result' : 'Team Result'}
+            </p>
           </motion.div>
         ))}
+        {filteredResults.length === 0 && <p className="text-center py-20 text-white/10 italic">No results found.</p>}
       </div>
     </div>
   );
@@ -176,8 +206,12 @@ function ProgramManager({ programs }: { programs: Program[] }) {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const nextNum = programs.length + 1;
+      const programNumber = `P-${nextNum.toString().padStart(2, '0')}`;
+      
       await addDoc(collection(db, 'programs'), {
         name,
+        programNumber,
         type,
         maxParticipants: Number(maxParticipants)
       });
@@ -243,10 +277,28 @@ function ProgramManager({ programs }: { programs: Program[] }) {
             animate={{ opacity: 1, scale: 1 }}
             className="glass-card p-4 rounded-2xl flex justify-between items-center"
            >
-             <div>
-               <h3 className="font-bold">{p.name}</h3>
-               <p className="text-xs text-white/40 uppercase">{p.type} • Up to {p.maxParticipants}</p>
+             <div className="flex-1">
+               <p className="text-xs text-white/20 font-black mb-1">#{p.programNumber}</p>
+               <h3 className="font-bold text-brand-primary">{p.name}</h3>
+               <p className="text-xs text-white/40 uppercase font-medium">{p.type} • Up to {p.maxParticipants} Members</p>
              </div>
+             <button 
+                onClick={async () => {
+                   if(confirm('Delete program?')) {
+                      // Note: In real app, check for linked results first
+                      try {
+                        const batch = writeBatch(db);
+                        batch.delete(doc(db, 'programs', p.id));
+                        await batch.commit();
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.DELETE, 'programs');
+                      }
+                   }
+                }}
+                className="p-2 text-white/10 hover:text-red-400 transition-colors"
+             >
+                <Trash className="w-4 h-4" />
+             </button>
            </motion.div>
         ))}
       </div>
@@ -263,13 +315,16 @@ interface ParticipantInput {
 
 function ResultForm({ programs, resultsCount, onSuccess }: { programs: Program[], resultsCount: number, onSuccess?: () => void }) {
   const [selectedProgramId, setSelectedProgramId] = useState('');
+  const [customName, setCustomName] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [scope, setScope] = useState<'program' | 'team'>('program');
+  const [templateId, setTemplateId] = useState('modern-dark');
   const [participants, setParticipants] = useState<ParticipantInput[]>([{ name: '', team: '', points: 0, grade: 'A' }]);
   const [publishing, setPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   const selectedProgram = programs.find(p => p.id === selectedProgramId);
+  const displayName = customName || selectedProgram?.name || "Program Name";
 
   const addParticipant = () => {
     setParticipants([...participants, { name: '', team: '', points: 0, grade: 'A' }]);
@@ -318,10 +373,11 @@ function ResultForm({ programs, resultsCount, onSuccess }: { programs: Program[]
       // 4. Save to Firestore
       const resultData = {
         programId: selectedProgramId,
-        programName: selectedProgram.name,
+        programName: displayName,
         category,
         resultNumber: resultsCount + 1,
         resultScope: scope,
+        templateId,
         publishedAt: serverTimestamp(),
         posterUrl
       };
@@ -363,21 +419,32 @@ function ResultForm({ programs, resultsCount, onSuccess }: { programs: Program[]
         {/* Form */}
         <div className="space-y-6">
           <div className="glass-card p-6 rounded-3xl space-y-4">
+            <div>
+              <label className="block text-xs uppercase tracking-widest text-white/40 mb-2">Select Program Base</label>
+              <select 
+                value={selectedProgramId} 
+                onChange={e => setSelectedProgramId(e.target.value)}
+                className="w-full bg-[#16213e] border border-white/10 rounded-xl px-4 py-3 focus:border-brand-primary h-12"
+                required
+              >
+                <option value="">Select Program</option>
+                {programs.map(p => (
+                  <option key={p.id} value={p.id} className="bg-[#16213e]">{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+                <label className="block text-xs uppercase tracking-widest text-white/40 mb-2">Custom Result Name (Optional)</label>
+                <input 
+                    placeholder="Enter custom name if different from program"
+                    value={customName}
+                    onChange={e => setCustomName(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-brand-primary"
+                />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs uppercase tracking-widest text-white/40 mb-2">Program</label>
-                <select 
-                  value={selectedProgramId} 
-                  onChange={e => setSelectedProgramId(e.target.value)}
-                  className="w-full bg-[#16213e] border border-white/10 rounded-xl px-4 py-3 focus:border-brand-primary h-12"
-                  required
-                >
-                  <option value="">Select Program</option>
-                  {programs.map(p => (
-                    <option key={p.id} value={p.id} className="bg-[#16213e]">{p.name}</option>
-                  ))}
-                </select>
-              </div>
               <div>
                 <label className="block text-xs uppercase tracking-widest text-white/40 mb-2">Category</label>
                 <select 
@@ -390,24 +457,32 @@ function ResultForm({ programs, resultsCount, onSuccess }: { programs: Program[]
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-xs uppercase tracking-widest text-white/40 mb-2">Result Scope</label>
+                <select 
+                    value={scope} 
+                    onChange={e => setScope(e.target.value as any)}
+                    className="w-full bg-[#16213e] border border-white/10 rounded-xl px-4 py-3 focus:border-brand-primary h-12"
+                >
+                    <option value="program" className="bg-[#16213e]">Program Result</option>
+                    <option value="team" className="bg-[#16213e]">Team Result</option>
+                </select>
+              </div>
             </div>
 
-            <div className="space-y-2">
-               <label className="block text-xs uppercase tracking-widest text-white/40">Result Scope</label>
-               <div className="flex gap-4">
-                  {['program', 'team'].map(s => (
-                    <label key={s} className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="scope" 
-                        checked={scope === s} 
-                        onChange={() => setScope(s as any)}
-                        className="w-4 h-4 accent-brand-primary"
-                      />
-                      <span className="capitalize">{s} Result</span>
-                    </label>
-                  ))}
-               </div>
+            <div>
+                <label className="block text-xs uppercase tracking-widest text-white/40 mb-2">Poster Template</label>
+                <div className="grid grid-cols-3 gap-2">
+                    {['modern-dark', 'minimal-light', 'royal-gold'].map(t => (
+                        <button 
+                            key={t}
+                            onClick={() => setTemplateId(t)}
+                            className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${templateId === t ? 'orange-gradient text-black border-transparent' : 'bg-white/5 border-white/10 text-white/40 hover:border-white/20'}`}
+                        >
+                            {t.replace('-', ' ')}
+                        </button>
+                    ))}
+                </div>
             </div>
           </div>
 
@@ -510,10 +585,11 @@ function ResultForm({ programs, resultsCount, onSuccess }: { programs: Program[]
             <h3 className="text-xs uppercase tracking-widest text-white/40">Poster Canvas</h3>
             <div className="p-4 bg-black rounded-3xl border border-white/10 overflow-hidden">
                <PosterPreview 
-                programName={selectedProgram?.name || "Program Name"}
+                programName={displayName}
                 category={category}
                 resultNumber={resultsCount + 1}
-                winners={getRankedParticipants()}
+                winners={getRankedParticipants() as any}
+                templateId={templateId}
                 id="poster-to-capture"
                />
             </div>

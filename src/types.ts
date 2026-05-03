@@ -7,6 +7,7 @@ export interface UserProfile {
 export interface Program {
   id: string;
   name: string;
+  programNumber: string;
   type: 'single' | 'group';
   maxParticipants: number;
 }
